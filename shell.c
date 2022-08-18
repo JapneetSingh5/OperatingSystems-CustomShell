@@ -10,7 +10,7 @@ int main(){
     while(1){
         getcwd(currentDirectory,  PATH_BUFFER_SIZE);
         printf("%s~$ ",currentDirectory);
-        scanf("%s",input);
+        scanf("%[^\n]%*c",input);
         printf("%s\n",input);
     }
 }
