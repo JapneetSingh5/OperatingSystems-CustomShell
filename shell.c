@@ -5,6 +5,7 @@
 #include<string.h>
 
 #define PATH_BUFFER_SIZE 256
+#define MIN(a,b) (((a)<(b))?(a):(b))
 #define INPUT_BUFFER_SIZE 1024
 #define BUILT_IN_COMMANDS_SIZE = 2;
 
@@ -19,17 +20,6 @@ int isPsHistory(char* input){
     return 0;
 }
 
-void split(char* input, char* args[512]){
-    int i = 0;
-    char * token = strtok(input, " ");
-    while( token != NULL ) {
-        args[i]=token;
-        i++;
-        token = strtok(NULL, " ");
-    }
-    args[i]=NULL;
-}
-
 int isCmdHistory(char* input){
     if(strcmp(input,"cmd_history")==0){
         return 1;
@@ -37,29 +27,74 @@ int isCmdHistory(char* input){
     return 0;
 }
 
+void split(char* input, char* args[512]){
+    int i = 0;
+    char * token = strtok(input, " ");
+    while( token != NULL ) {
+        if(token[0]=='&'){
+            ++token;
+            
+        }
+        args[i]=token;
+        i++;
+        token = strtok(NULL, " ");
+    }
+    args[i]=NULL;
+}
+
 int main(){
     char currentDirectory[PATH_BUFFER_SIZE];
     char input[INPUT_BUFFER_SIZE];
     char *args[512];
+    char *cmdHistory[5];
+    int processList[1024];
     signal(SIGINT, signalHandler);
+    int processNo = 0;
     while(1){
         getcwd(currentDirectory,  PATH_BUFFER_SIZE);
         printf("%s~$ ",currentDirectory);
         scanf("%[^\n]%*c",input); // scanf with regex to take spaces as input and not exit
+        cmdHistory[processNo%5]=NULL;
+        strcpy(cmdHistory[processNo%5],input);
         split(input, args);
         if(isPsHistory(args[0])){
-            printf("Printing Ps history");
+            processNo++;
+            for(int i=0; i<processNo; i++){
+                printf("%d ",processList[i]);
+                int processStatus;
+                if(waitpid(processList[i],&processStatus,WNOHANG)<=0){
+                    printf("STOPPED\n");
+                }else{
+                    printf("RUNNING\n");
+                }
+            }
+            // printf("Printing Ps history");
         }else if(isCmdHistory(args[0])){
-            printf("Printing cmd history");
+            processNo++;
+            for(int i=0; i<MIN(5,processNo); i++){
+                printf("%s %d\n", cmdHistory[i], i);
+            }
+            // printf("Printing cmd history");
         }else{
             int childProcessID = fork();
             if(childProcessID == 0){
                 // this is the child process 
                 // execute the command here
                 execvp(args[0], args);
-            }else{
-                wait(NULL);
-                printf("Finished with child process %d \n", childProcessID);
+                //if control reaches here, execvp returned an error
+                printf("ERROR \n");
+            }else if(input[0]!='&'){
+                processList[processNo]=childProcessID;
+                int childProcessStatus;
+                waitpid(childProcessID, &childProcessStatus, 0);
+                processNo++;
+                printf("Finished with child process %d status %d \n", childProcessID, childProcessStatus);
+            }else if(input[0]=='&'){
+                processList[processNo]=childProcessID;
+                processNo++;
+                printf("Child running in bg %d \n",childProcessID);
+                int ps;
+                printf("%d - ",waitpid(childProcessID,&ps,WNOHANG));
             }
         }
     }
