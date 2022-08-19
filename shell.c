@@ -55,7 +55,9 @@ int main(){
         getcwd(currentDirectory,  PATH_BUFFER_SIZE);
         printf("%s~$ ",currentDirectory);
         scanf("%[^\n]%*c",input); // scanf with regex to take spaces as input and not exit
-        split(input, args);
+        char *inputToSplit[INPUT_BUFFER_SIZE];
+        strcpy(inputToSplit,input);
+        split(inputToSplit, args);
         if(isPsHistory(args[0])){
             strcpy(&cmdHistory[processNo%5],input);
             processNo++;
@@ -70,8 +72,8 @@ int main(){
             }
             // printf("Printing Ps history");
         }else if(isCmdHistory(args[0])){
-            for(int i=processNo%5 - 1; i>processNo%5 - MIN(5,processNo+1); i--){
-                printf("%s \n",cmdHistory[i%5]);
+            for(int i=(processNo - 1)%5; i>((processNo-1)%5 - MIN(5,processNo)); i--){
+                printf("%s \n",cmdHistory[(i+5)%5]);
             }
             strcpy(&cmdHistory[processNo%5],input);
             processNo++;
