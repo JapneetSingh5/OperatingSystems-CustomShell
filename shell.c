@@ -57,6 +57,7 @@ int main(){
         scanf("%[^\n]%*c",input); // scanf with regex to take spaces as input and not exit
         split(input, args);
         if(isPsHistory(args[0])){
+            strcpy(&cmdHistory[processNo%5],input);
             processNo++;
             for(int i=0; i<processNo; i++){
                 printf("%d ",processList[i]);
@@ -69,9 +70,10 @@ int main(){
             }
             // printf("Printing Ps history");
         }else if(isCmdHistory(args[0])){
-            for(int i=processNo%5-1; i>processNo%5 - 1 - MIN(5,processNo); i--){
+            for(int i=processNo%5 - 1; i>processNo%5 - MIN(5,processNo+1); i--){
                 printf("%s \n",cmdHistory[i%5]);
             }
+            strcpy(&cmdHistory[processNo%5],input);
             processNo++;
         }else{
             int childProcessID = fork();
@@ -85,10 +87,12 @@ int main(){
                 processList[processNo]=childProcessID;
                 int childProcessStatus;
                 waitpid(childProcessID, &childProcessStatus, 0);
+                strcpy(&cmdHistory[processNo%5],input);
                 processNo++;
                 printf("Finished with child process %d status %d \n", childProcessID, childProcessStatus);
             }else if(input[0]=='&'){
                 processList[processNo]=childProcessID;
+                strcpy(&cmdHistory[processNo%5],input);
                 processNo++;
                 printf("Child running in bg %d \n",childProcessID);
                 int ps;
