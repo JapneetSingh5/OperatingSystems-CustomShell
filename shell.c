@@ -6,6 +6,7 @@
 
 #define PATH_BUFFER_SIZE 256
 #define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)<(b))?(b):(a))
 #define INPUT_BUFFER_SIZE 1024
 #define BUILT_IN_COMMANDS_SIZE = 2;
 
@@ -46,7 +47,7 @@ int main(){
     char currentDirectory[PATH_BUFFER_SIZE];
     char input[INPUT_BUFFER_SIZE];
     char *args[512];
-    char *cmdHistory[5];
+    char cmdHistory[5][512] = {"command1","command2","command3","command4","command5"};
     int processList[1024];
     signal(SIGINT, signalHandler);
     int processNo = 0;
@@ -54,8 +55,6 @@ int main(){
         getcwd(currentDirectory,  PATH_BUFFER_SIZE);
         printf("%s~$ ",currentDirectory);
         scanf("%[^\n]%*c",input); // scanf with regex to take spaces as input and not exit
-        cmdHistory[processNo%5]=NULL;
-        strcpy(cmdHistory[processNo%5],input);
         split(input, args);
         if(isPsHistory(args[0])){
             processNo++;
@@ -70,11 +69,10 @@ int main(){
             }
             // printf("Printing Ps history");
         }else if(isCmdHistory(args[0])){
-            processNo++;
-            for(int i=0; i<MIN(5,processNo); i++){
-                printf("%s %d\n", cmdHistory[i], i);
+            for(int i=processNo%5-1; i>processNo%5 - 1 - MIN(5,processNo); i--){
+                printf("%s \n",cmdHistory[i%5]);
             }
-            // printf("Printing cmd history");
+            processNo++;
         }else{
             int childProcessID = fork();
             if(childProcessID == 0){
