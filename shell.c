@@ -7,8 +7,7 @@
 #define PATH_BUFFER_SIZE 256
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)<(b))?(b):(a))
-#define INPUT_BUFFER_SIZE 1024
-#define BUILT_IN_COMMANDS_SIZE = 2;
+#define INPUT_BUFFER_SIZE 128
 
 void signalHandler(int signal){
     exit(0);
@@ -28,9 +27,42 @@ int isCmdHistory(char* input){
     return 0;
 }
 
-void split(char* input, char* args[512]){
+int isPiped(char* input){
+    for(int i=0; i<INPUT_BUFFER_SIZE; i++){
+        if(input[i]==NULL || input[i]=='\0'){
+            return 0;
+        }else if(input[i]=='|'){
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int isSetEnv(char* input){
+    for(int i=0; i<INPUT_BUFFER_SIZE; i++){
+        if(input[i]==NULL || input[i]=='\0'){
+            return 0;
+        }else if(input[i]=='='){
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int isPrintEnv(char* input){
+    for(int i=0; i<INPUT_BUFFER_SIZE; i++){
+        if(input[i]==NULL || input[i]=='\0'){
+            return 0;
+        }else if(input[i]=='$'){
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void split(char* input, char* args[512], char* delim){
     int i = 0;
-    char * token = strtok(input, " ");
+    char *token = strtok(input, delim);
     while( token != NULL ) {
         if(token[0]=='&'){
             ++token;
@@ -38,7 +70,7 @@ void split(char* input, char* args[512]){
         }
         args[i]=token;
         i++;
-        token = strtok(NULL, " ");
+        token = strtok(NULL, delim);
     }
     args[i]=NULL;
 }
@@ -46,8 +78,8 @@ void split(char* input, char* args[512]){
 int main(){
     char currentDirectory[PATH_BUFFER_SIZE];
     char input[INPUT_BUFFER_SIZE];
-    char *args[512];
-    char cmdHistory[5][512] = {"command1","command2","command3","command4","command5"};
+    char *args[128];
+    char cmdHistory[5][128] = {"command1","command2","command3","command4","command5"};
     int processList[1024];
     signal(SIGINT, signalHandler);
     int processNo = 0;
@@ -57,7 +89,7 @@ int main(){
         scanf("%[^\n]%*c",input); // scanf with regex to take spaces as input and not exit
         char *inputToSplit[INPUT_BUFFER_SIZE];
         strcpy(inputToSplit,input);
-        split(inputToSplit, args);
+        split(inputToSplit,args," ");
         if(isPsHistory(args[0])){
             strcpy(&cmdHistory[processNo%5],input);
             processNo++;
@@ -77,6 +109,16 @@ int main(){
             }
             strcpy(&cmdHistory[processNo%5],input);
             processNo++;
+        }else if(isSetEnv(input)){
+            char *inputToSplitEnv[INPUT_BUFFER_SIZE];
+            strcpy(inputToSplitEnv,input);
+            split(inputToSplitEnv,args,"=");
+            setenv(args[0],args[1],"=");
+        }else if(isPrintEnv(input)){
+            char *inputToSplitEnv[INPUT_BUFFER_SIZE];
+            strcpy(inputToSplitEnv,input);
+            split(inputToSplitEnv,args,"$");
+            printf("%s \n",getenv(args[1]));
         }else{
             int childProcessID = fork();
             if(childProcessID == 0){
