@@ -85,9 +85,6 @@ void pipeSplit(char* input, char* args[128], char* delim){
     int i = 0;
     char *token = strtok(input, delim);
     while( token != NULL ) {
-        if(token[0]=='&'){
-            ++token;   
-        }
         args[i]=token;
         i++;
         token = strtok(NULL, delim);
@@ -125,71 +122,64 @@ int main(){
         getcwd(currentDirectory,  PATH_BUFFER_SIZE);
         printf("%s~$ ",currentDirectory);
         scanf("%[^\n]%*c",input); // scanf with regex to take spaces as input and not exit
+        if(input[0]=='\0'){
+            printf("ERROR \n");
+            continue;
+        }
         char *inputToSplit1[INPUT_BUFFER_SIZE],*inputToSplit2[INPUT_BUFFER_SIZE];
 
         if(isPiped(input)){
             // piped
-            printf("Command is piped -> %s\n",input);
+            // printf("Command is piped -> %s\n",input);
             strcpy(cmdHistory[processNo%5],input);
 
             char* cmds[128];
             buildPipeArgs(input, cmds);
-
-            printf("cmd1 %s , cmd2 %s", cmds[0], cmds[1]);
-            //cmds[0] is cmd1, cmds[1] is cmd2
-
-            //pipe file descriptors
-            //pfd[0] : read side, pfd[1] : write side of the pipe
-            int pfd[2];
-            if(pipe(pfd)!=0){
-                printf("ERROR : Pipes could not be setup correctly. \n");
-            }
-            printf("Here \n");
-
-            int childProcessID1 = fork();
 
             strcpy(inputToSplit1, cmds[0]);
             pipeSplit(inputToSplit1, args, " ");
 
             strcpy(inputToSplit2, cmds[1]);
             pipeSplit(inputToSplit2, args2, " ");
-            printf("%s, %s", args2[0], args2[1]);
+            // printf("%s, %s", args2[0], args2[1]);
 
+            // printf("cmd1 %s , cmd2 %s", cmds[0], cmds[1]);
+            //cmds[0] is cmd1, cmds[1] is cmd2
+
+            //pipe file descriptors
+            //pfd[0] : read side, pfd[1] : write side of the pipe
+            int pfd[2];
+            pipe(pfd);
+            // printf("Here \n");
+
+            pid_t childProcessID1 = fork();
 
             if(childProcessID1==0){
-                printf("command 1 here start\n");
-                close(pfd[0]); 		// close read end of the pipe
-                printf("command 1 here 2 start\n");
-                dup2(pfd[1], 1);	// write end of the pipe becomes stdout 
-                printf("command 1 here 3 start\n");
-                // close(pfd[1]);
-                // printf("command 1 here 4 start\n");
+                dup2(pfd[1], STDOUT_FILENO);	// write end of the pipe becomes stdout 
+                close(pfd[0]); 		            // close read end of the pipe
+                close(pfd[1]);
                 if(isSetEnv(args[0])){
-                    printf("command 1 here 1\n");
+                    // printf("Setting env var in cmd1 \n");
                     char *inputToSplitEnv[INPUT_BUFFER_SIZE];
                     strcpy(inputToSplitEnv,cmds[0]);
                     pipeSplit(inputToSplitEnv,envargs,"=");
                     setenv(envargs[0],envargs[1],1);
-                    printf("%s set to %s\n",envargs[0],getenv(envargs[0]));
+                    char *argsDef[][128] = { "echo","done",NULL };
+                    execvp("echo",argsDef);
                 }else{
-                    printf("command 1 here 2\n");
                     int status = execvp(args[0], args);
                     if(status<0){
                         printf("ERROR \n");
                         break;
                     }
                 };
-                printf("command 1 here end\n");
             }else if(childProcessID1>0){
-                int childProcessID1status;
-                waitpid(childProcessID1, &childProcessID1status, WNOHANG); //wait for first child to get done
-                printf("CMD1 done \n");
-                printf("%s set to %s\n",envargs[0],getenv(envargs[0]));
-                int childProcessID2 = fork();
+                waitpid(childProcessID1, NULL, 0); //wait for first child to get done
+                pid_t childProcessID2 = fork();
                 if(childProcessID2==0){
-                    close(pfd[1]); 		// close write end of the pipe
                     dup2(pfd[0], STDIN_FILENO);	// read end of the pipe becomes stdin 
                     close(pfd[0]); 
+                    close(pfd[1]); 		// close write end of the pipe
                     if(isSetEnv(cmds[1])){
                         char *inputToSplitEnv[INPUT_BUFFER_SIZE];
                         strcpy(inputToSplitEnv,cmds[1]);
@@ -197,6 +187,16 @@ int main(){
                         setenv(envargs[0],envargs[1],1);
                         strcpy(cmdHistory[processNo%5],input);
                     }else{
+                        for(int i=0; args2[i]!=NULL; i++){
+                            printf("%s \n", args2[i]);
+                            if(args2[i][0]=='$'){
+                                char *temp[128];
+                                strcpy(temp, args2[i]);
+                                args2[i]=NULL;
+                                char* token = "a";
+                                args2[i]=getenv(token);
+                            }
+                        }
                         int status = execvp(args2[0], args2);
                         if(status<0){
                             printf("ERROR \n");
@@ -204,15 +204,17 @@ int main(){
                         }
                     };
                 }else if(childProcessID2>0){
-                   int childProcessID2status;
-                    waitpid(childProcessID2, &childProcessID2status, WNOHANG); //wait for first child to get done
+                    close(pfd[0]);
+                    close(pfd[1]);
+                    waitpid(childProcessID1, NULL, 0); //wait for first child to get done
+                    waitpid(childProcessID2, NULL, 0); //wait for first child to get done
                 }else{
                     printf("ERROR \n");
                 }
+
             }else if(childProcessID1<0){
                 printf("ERROR \n");
             }
-            printf("Here2 \n");
             processNo++;
         
         }else{
@@ -265,6 +267,7 @@ int main(){
             }
             processNo++;
         }
+        input[0] = "\0";
     }
     return 0;
 }
