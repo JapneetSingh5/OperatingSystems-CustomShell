@@ -176,6 +176,27 @@ int main(){
                     // setenv(envargs[0],envargs[1],1);
                     char *argsDef[][128] = {"echo","done",NULL };
                     execvp("echo",argsDef);
+                }else if(isPsHistory(args[0])){
+                    char *output;
+                    output = malloc(1024*sizeof(char));
+                    for(int i=0; i<processNo+1; i++){
+                        printf("%d ",processList[i]);
+                        int processStatus;
+                        if(waitpid(processList[i],&processStatus,WNOHANG)<=0){
+                            // strcat(output, "STOPPED\n");
+                            printf("STOPPED\n");
+                        }else{
+                            // strcat(output, "RUNNING\n");
+                            printf("RUNNING\n");
+                        }
+                    }
+                    open(pfd[1]);
+                    write(pfd[1], 1, strlen(output)+1);
+                    close(pfd[1]);
+                }else if(isCmdHistory(args[0])){
+                    for(int i=(processNo - 1)%5; i>((processNo-1)%5 - MIN(5,processNo)); i--){
+                        printf("%s \n",cmdHistory[(i+5)%5]);
+                    }
                 }else{
                     int status = execvp(args[0], args);
                     if(status<0){
