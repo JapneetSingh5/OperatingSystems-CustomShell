@@ -13,10 +13,12 @@ char currentDirectory[PATH_BUFFER_SIZE];
 char cmdHistory[5][128] = {"command1","command2","command3","command4","command5"};
 char *input;
 int processList[1024];
+int processStatus[1024]; // 1 means running, 0 means stopped
 int processNo = 0;
 int commandNo = 0;
 
 //todo: ps_history and cmd_history fix
+
 void signalHandler(int signal){
     exit(0);
 }
@@ -60,11 +62,13 @@ int isSetEnv(char* input){
 void execPsHistory(){
     for(int i=0; i<processNo+1; i++){
         printf("%d ",processList[i]);
-        int processStatus;
-        if(waitpid(processList[i],&processStatus,WNOHANG)<=0){
+        if(processStatus[i]==0){
             printf("STOPPED\n");
-        }else{
+        }else if(waitpid(processList[i],NULL,WNOHANG)==0){
             printf("RUNNING\n");
+        }else{
+            processStatus[i]=0;
+            printf("STOPPED\n");
         }
     }
 }
@@ -140,23 +144,25 @@ int main(){
             printf("ERROR \n");
             continue;
         }
-        char *inputToSplit1[INPUT_BUFFER_SIZE],*inputToSplit2[INPUT_BUFFER_SIZE];
+        char *inputToSplit1[INPUT_BUFFER_SIZE],*inputToSplit2[INPUT_BUFFER_SIZE], *inputToSplitPipeArgs[INPUT_BUFFER_SIZE];
         if(isPiped(input)){
-            // piped
-            strcpy(cmdHistory[processNo%5],input);
-
+            // INPUT IS PIPED
+            // cmds[0] will store first command to be executed
+            // cmds[1] will store the second command to be executed
             char* cmds[128];
-            buildPipeArgs(input, cmds);
-
+            strcpy(inputToSplitPipeArgs,input);
+            buildPipeArgs(inputToSplitPipeArgs, cmds);
             strcpy(inputToSplit1, cmds[0]);
+            // build args array for cmds[0], stor in args
             pipeSplit(inputToSplit1, args, " ");
-
+            // build args array for cmds[1], store in args2
             strcpy(inputToSplit2, cmds[1]);
             pipeSplit(inputToSplit2, args2, " ");
-            //pipe file descriptors
-            //pfd[0] : read side, pfd[1] : write side of the pipe
+            // pipe file descriptors
+            // pfd[0] : read side, pfd[1] : write side of the pipe
             int pfd[2];
             pipe(pfd);
+            // create first child to execute first command
             pid_t childProcessID1 = fork();
             if(childProcessID1==0){
                 dup2(pfd[1], STDOUT_FILENO);	// write end of the pipe becomes stdout 
@@ -184,7 +190,11 @@ int main(){
                 };
                 exit(0);
             }else if(childProcessID1>0){
-                waitpid(childProcessID1, NULL, 0); //wait for first child to get done
+                // wait for first child to get done
+                waitpid(childProcessID1, NULL, 0); 
+                processList[processNo]=childProcessID1;
+                processStatus[processNo]=1;
+                processNo++;
                 pid_t childProcessID2 = fork();
                 if(childProcessID2==0){
                     dup2(pfd[0], STDIN_FILENO);	// read end of the pipe becomes stdin 
@@ -209,31 +219,30 @@ int main(){
                     close(pfd[1]);
                     waitpid(childProcessID1, NULL, 0); //wait for first child to get done
                     waitpid(childProcessID2, NULL, 0); //wait for first child to get done
+                    processList[processNo]=childProcessID2;
+                    processStatus[processNo]=1;
+                    processNo++;
                 }else{
                     printf("ERROR \n");
                 }
-
             }else if(childProcessID1<0){
                 printf("ERROR \n");
             }
-            processNo++;
-        
+            strcpy(cmdHistory[commandNo%5],input);
+            commandNo++;
         }else{
-            // not piped
+            // INPUT IS NOT PIPED
             strcpy(inputToSplit1,input);
             split(inputToSplit1,args," ");
             if(isPsHistory(args[0])){
-                strcpy(cmdHistory[processNo%5],input);
                 execPsHistory();
             }else if(isCmdHistory(args[0])){
                 execCmdHistory();
-                strcpy(cmdHistory[processNo%5],input);
             }else if(isSetEnv(input)){
                 char *inputToSplitEnv[INPUT_BUFFER_SIZE];
                 strcpy(inputToSplitEnv,input);
                 split(inputToSplitEnv,args,"=");
                 setenv(args[0],args[1],1);
-                strcpy(cmdHistory[processNo%5],input);
             }else{
                 int childProcessID = fork();
                 if(childProcessID == 0){
@@ -253,15 +262,17 @@ int main(){
                     printf("ERROR \n");
                 }else if(input[0]!='&'){
                     processList[processNo]=childProcessID;
+                    processStatus[processNo]=1;
                     int childProcessStatus;
                     waitpid(childProcessID, &childProcessStatus, 0);
-                    strcpy(cmdHistory[processNo%5],input);
                 }else if(input[0]=='&'){
                     processList[processNo]=childProcessID;
-                    strcpy(cmdHistory[processNo%5],input);
+                    processStatus[processNo]=1;
                 }
             }
+            strcpy(cmdHistory[commandNo%5],input);
             processNo++;
+            commandNo++;
         }
     }
     return 0;
