@@ -18,8 +18,6 @@ int processNo = 0;
 int commandNo = 0;
 int isSetEnvCommand = 0;
 
-//todo: ps_history and cmd_history fix
-
 void signalHandler(int signal){
     exit(0);
 }
@@ -61,7 +59,7 @@ int isSetEnv(char* input){
 }
 
 void execPsHistory(){
-    for(int i=0; i<processNo+1; i++){
+    for(int i=0; i<processNo; i++){
         printf("%d ",processList[i]);
         if(processStatus[i]==0){
             printf("STOPPED\n");
