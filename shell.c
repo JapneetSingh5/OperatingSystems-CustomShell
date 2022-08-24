@@ -9,6 +9,12 @@
 #define MAX(a,b) (((a)<(b))?(b):(a))
 #define INPUT_BUFFER_SIZE 128
 
+char currentDirectory[PATH_BUFFER_SIZE];
+char cmdHistory[5][128] = {"command1","command2","command3","command4","command5"};
+char *input;
+int processList[1024];
+int processNo = 0;
+
 void signalHandler(int signal){
     exit(0);
 }
@@ -47,6 +53,24 @@ int isSetEnv(char* input){
         }
     }
     return 0;
+}
+
+void execPsHistory(){
+    for(int i=0; i<processNo+1; i++){
+        printf("%d ",processList[i]);
+        int processStatus;
+        if(waitpid(processList[i],&processStatus,WNOHANG)<=0){
+            printf("STOPPED\n");
+        }else{
+            printf("RUNNING\n");
+        }
+    }
+}
+
+void  execCmdHistory(){
+    for(int i=(processNo - 1)%5; i>((processNo-1)%5 - MIN(5,processNo)); i--){
+        printf("%s \n",cmdHistory[(i+5)%5]);
+    }
 }
 
 // split builds the arg array
@@ -99,13 +123,21 @@ void buildPipeArgs(char* input, char *cmds[128]){
     cmds[1]=token;
 }
 
+void printPrompt(){
+    getcwd(currentDirectory,  PATH_BUFFER_SIZE);
+    printf("%s~$ ",currentDirectory);
+}
+
+void getInput(){
+    fgets(input, INPUT_BUFFER_SIZE, stdin);
+    input=strsep(&input,"\n");
+}
+
 int main(){
-    char currentDirectory[PATH_BUFFER_SIZE];
-    char *input;
     input = malloc(128*sizeof(char));
     char *args[128], *args2[128],  *envargs[128];
-    char cmdHistory[5][128] = {"command1","command2","command3","command4","command5"};
-    int processList[1024];
+    signal(SIGINT, signalHandler);
+
     char **envVarNames;
     char **envVarValues;
     envVarNames = malloc(1024 * sizeof(char*));
@@ -118,22 +150,14 @@ int main(){
         envVarValues[i] = malloc((128 + 1) * sizeof(char));
     }
     int envVarCount = 0;
-    signal(SIGINT, signalHandler);
-    int processNo = 0;
     while(1){
-        // printf("\n envVarCount: %d , %s, %s\n", envVarCount, envVarNames[envVarCount-1], envVarValues[envVarCount-1]);
-        getcwd(currentDirectory,  PATH_BUFFER_SIZE);
-        printf("%s~$ ",currentDirectory);
-        fgets(input, INPUT_BUFFER_SIZE, stdin);
-        // input[strlen(input)-2]='\'
-        input=strsep(&input,"\n");
-        // scanf("%[^\n]%*c",input); // scanf with regex to take spaces as input and not exit
-        if(input[0]=='\0'){
+        printPrompt();
+        getInput();
+        if(input[0]==NULL){
             printf("ERROR \n");
             continue;
         }
         char *inputToSplit1[INPUT_BUFFER_SIZE],*inputToSplit2[INPUT_BUFFER_SIZE];
-
         if(isPiped(input)){
             // piped
             strcpy(cmdHistory[processNo%5],input);
@@ -162,19 +186,10 @@ int main(){
                 dup2(pfd[1], STDOUT_FILENO);	// write end of the pipe becomes stdout 
                 close(pfd[0]); 		            // close read end of the pipe
                 close(pfd[1]);
-                if(isSetEnv(cmds[0])){
-                    char *argsDef[][128] = {"echo","done",NULL };
-                    execvp("echo",argsDef);
-                }else if(isPsHistory(cmds[0])){
-                    for(int i=0; i<processNo+1; i++){
-                        printf("%d ",processList[i]);
-                        int processStatus;
-                        if(waitpid(processList[i],&processStatus,WNOHANG)<=0){
-                            printf("STOPPED\n");
-                        }else{
-                            printf("RUNNING\n");
-                        }
-                    }
+                if(isPsHistory(cmds[0])){
+                    execPsHistory();
+                }else if(isCmdHistory(cmds[0])){
+                    execCmdHistory();
                 }else{
                     int status = execvp(args[0], args);
                     if(status<0){
@@ -254,19 +269,9 @@ int main(){
             split(inputToSplit1,args," ");
             if(isPsHistory(args[0])){
                 strcpy(cmdHistory[processNo%5],input);
-                for(int i=0; i<processNo+1; i++){
-                    printf("%d ",processList[i]);
-                    int processStatus;
-                    if(waitpid(processList[i],&processStatus,WNOHANG)<=0){
-                        printf("STOPPED\n");
-                    }else{
-                        printf("RUNNING\n");
-                    }
-                }
+                execPsHistory();
             }else if(isCmdHistory(args[0])){
-                for(int i=(processNo - 1)%5; i>((processNo-1)%5 - MIN(5,processNo)); i--){
-                    printf("%s \n",cmdHistory[(i+5)%5]);
-                }
+                execCmdHistory();
                 strcpy(cmdHistory[processNo%5],input);
             }else if(isSetEnv(input)){
                 char *inputToSplitEnv[INPUT_BUFFER_SIZE];
