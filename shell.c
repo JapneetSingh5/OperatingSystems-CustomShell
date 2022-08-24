@@ -16,6 +16,7 @@ int processList[1024];
 int processStatus[1024]; // 1 means running, 0 means stopped
 int processNo = 0;
 int commandNo = 0;
+int isSetEnvCommand = 0;
 
 //todo: ps_history and cmd_history fix
 
@@ -165,8 +166,10 @@ int main(){
             // create first child to execute first command
             pid_t childProcessID1 = fork();
             if(childProcessID1==0){
-                dup2(pfd[1], STDOUT_FILENO);	// write end of the pipe becomes stdout 
-                close(pfd[0]); 		            // close read end of the pipe
+                // write end of the pipe becomes stdout 
+                dup2(pfd[1], STDOUT_FILENO);	
+                // close read end of the pipe
+                close(pfd[0]); 		            
                 close(pfd[1]);
                 if(isPsHistory(cmds[0])){
                     execPsHistory();
@@ -197,9 +200,11 @@ int main(){
                 processNo++;
                 pid_t childProcessID2 = fork();
                 if(childProcessID2==0){
-                    dup2(pfd[0], STDIN_FILENO);	// read end of the pipe becomes stdin 
+                    // read end of the pipe becomes stdin 
+                    dup2(pfd[0], STDIN_FILENO);	
                     close(pfd[0]); 
-                    close(pfd[1]); 		// close write end of the pipe
+                    // close write end of the pipe
+                    close(pfd[1]); 		
                     for(int i=0; args2[i]!=NULL; i++){
                         if(args2[i][0]=='$'){
                             char* token;
@@ -217,8 +222,10 @@ int main(){
                 }else if(childProcessID2>0){
                     close(pfd[0]);
                     close(pfd[1]);
-                    waitpid(childProcessID1, NULL, 0); //wait for first child to get done
-                    waitpid(childProcessID2, NULL, 0); //wait for first child to get done
+                    // wait for first child to get done
+                    waitpid(childProcessID1, NULL, 0); 
+                    // wait for second child to get done
+                    waitpid(childProcessID2, NULL, 0); 
                     processList[processNo]=childProcessID2;
                     processStatus[processNo]=1;
                     processNo++;
@@ -234,32 +241,37 @@ int main(){
             // INPUT IS NOT PIPED
             strcpy(inputToSplit1,input);
             split(inputToSplit1,args," ");
-            if(isPsHistory(args[0])){
-                execPsHistory();
-            }else if(isCmdHistory(args[0])){
-                execCmdHistory();
-            }else if(isSetEnv(input)){
+            if(isSetEnv(input)){
+                isSetEnvCommand = 1;
                 char *inputToSplitEnv[INPUT_BUFFER_SIZE];
                 strcpy(inputToSplitEnv,input);
                 split(inputToSplitEnv,args,"=");
                 setenv(args[0],args[1],1);
             }else{
+                isSetEnvCommand = 0;
                 int childProcessID = fork();
                 if(childProcessID == 0){
                     // this is the child process 
                     // execute the command here
-                    for(int i=0; args[i]!=NULL; i++){
-                        if(args[i][0]=='$'){
-                            char* token;
-                            token = malloc(128 * sizeof(char));
-                            strcpy(token, args[i]);
-                            ++token;
-                            args[i]=getenv(token);
+                    if(isCmdHistory(args[0])){
+                        execCmdHistory();
+                    }else if(isPsHistory(args[0])){
+                        execPsHistory();
+                    }else{
+                        for(int i=0; args[i]!=NULL; i++){
+                            if(args[i][0]=='$'){
+                                char* token;
+                                token = malloc(128 * sizeof(char));
+                                strcpy(token, args[i]);
+                                ++token;
+                                args[i]=getenv(token);
+                            }
                         }
+                        execvp(args[0], args);
+                        //if control reaches here, execvp returned an error
+                        printf("ERROR \n");
                     }
-                    execvp(args[0], args);
-                    //if control reaches here, execvp returned an error
-                    printf("ERROR \n");
+                    exit(0);
                 }else if(input[0]!='&'){
                     processList[processNo]=childProcessID;
                     processStatus[processNo]=1;
@@ -271,7 +283,7 @@ int main(){
                 }
             }
             strcpy(cmdHistory[commandNo%5],input);
-            processNo++;
+            if(!isSetEnvCommand) processNo++;
             commandNo++;
         }
     }
