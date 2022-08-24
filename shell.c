@@ -38,7 +38,7 @@ int isCmdHistory(char* input){
 
 int isPiped(char* input){
     for(int i=0; i<INPUT_BUFFER_SIZE; i++){
-        if(input[i]==NULL || input[i]=='\0'){
+        if(input[i]=='\0'){
             return 0;
         }else if(input[i]=='|'){
             return 1;
@@ -49,7 +49,7 @@ int isPiped(char* input){
 
 int isSetEnv(char* input){
     for(int i=0; i<INPUT_BUFFER_SIZE; i++){
-        if(input[i]==NULL || input[i]=='\0'){
+        if(input[i]=='\0'){
             return 0;
         }else if(input[i]=='='){
             return 1;
@@ -73,7 +73,7 @@ void execPsHistory(){
 }
 
 void  execCmdHistory(){
-    for(int i=(processNo - 1)%5; i>((processNo-1)%5 - MIN(5,processNo)); i--){
+    for(int i=(commandNo - 1)%5; i>((commandNo-1)%5 - MIN(5,commandNo)); i--){
         printf("%s \n",cmdHistory[(i+5)%5]);
     }
 }
@@ -110,7 +110,7 @@ void buildPipeArgs(char* input, char *cmds[128]){
     for(int i=0; cmds[0][i] != '\0'; i++){
         if(cmds[0][i] == ' ' && cmds[0][i+1] == '\0'){
             cmds[0][i] = '\0';
-            cmds[0][i+1] = NULL;
+            cmds[0][i+1] = '\0';
         }
     }
     // printf("CMD1 (%s) \n", token);
@@ -139,11 +139,11 @@ int main(){
     while(1){
         printPrompt();
         getInput();
-        if(input[0]==NULL){
+        if(input[0]=='\0'){
             printf("ERROR \n");
             continue;
         }
-        char *inputToSplit1[INPUT_BUFFER_SIZE],*inputToSplit2[INPUT_BUFFER_SIZE], *inputToSplitPipeArgs[INPUT_BUFFER_SIZE];
+        char inputToSplit1[INPUT_BUFFER_SIZE],inputToSplit2[INPUT_BUFFER_SIZE], inputToSplitPipeArgs[INPUT_BUFFER_SIZE];
         if(isPiped(input)){
             // INPUT IS PIPED
             // cmds[0] will store first command to be executed
@@ -151,6 +151,7 @@ int main(){
             char* cmds[128];
             strcpy(inputToSplitPipeArgs,input);
             buildPipeArgs(inputToSplitPipeArgs, cmds);
+            // printf("CMD1: (%s) CMD2: (%s) \n",cmds[0],cmds[1]);
             strcpy(inputToSplit1, cmds[0]);
             // build args array for cmds[0], stor in args
             pipeSplit(inputToSplit1, args, " ");
@@ -241,7 +242,7 @@ int main(){
             split(inputToSplit1,args," ");
             if(isSetEnv(input)){
                 isSetEnvCommand = 1;
-                char *inputToSplitEnv[INPUT_BUFFER_SIZE];
+                char inputToSplitEnv[INPUT_BUFFER_SIZE];
                 strcpy(inputToSplitEnv,input);
                 split(inputToSplitEnv,args,"=");
                 setenv(args[0],args[1],1);
