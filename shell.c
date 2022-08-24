@@ -14,7 +14,9 @@ char cmdHistory[5][128] = {"command1","command2","command3","command4","command5
 char *input;
 int processList[1024];
 int processNo = 0;
+int commandNo = 0;
 
+//todo: ps_history and cmd_history fix
 void signalHandler(int signal){
     exit(0);
 }
@@ -81,12 +83,6 @@ void split(char* input, char* args[128], char* delim){
         if(token[0]=='&'){
             ++token;   
         }
-        // if(token[0]=='$'){
-        //     // printf("Token was earlier %s\n", token);
-        //     ++token;
-        //     token = getenv(token);
-        //     // printf("Token is now %s\n", token);
-        // }
         args[i]=token;
         i++;
         token = strtok(NULL, delim);
@@ -137,19 +133,6 @@ int main(){
     input = malloc(128*sizeof(char));
     char *args[128], *args2[128],  *envargs[128];
     signal(SIGINT, signalHandler);
-
-    char **envVarNames;
-    char **envVarValues;
-    envVarNames = malloc(1024 * sizeof(char*));
-    envVarValues = malloc(1024 * sizeof(char*));
-    for(int i = 0; i < 1024; i++) {
-        envVarNames[i] = malloc((128 + 1) * sizeof(char));
-    }
-    envVarValues = malloc(1024 * sizeof(char*));
-    for(int i = 0; i < 1024; i++) {
-        envVarValues[i] = malloc((128 + 1) * sizeof(char));
-    }
-    int envVarCount = 0;
     while(1){
         printPrompt();
         getInput();
@@ -170,18 +153,11 @@ int main(){
 
             strcpy(inputToSplit2, cmds[1]);
             pipeSplit(inputToSplit2, args2, " ");
-            // printf("%s, %s", args2[0], args2[1]);
-
-            printf("cmd1 %s , cmd2 %s \n", cmds[0], cmds[1]);
-            //cmds[0] is cmd1, cmds[1] is cmd2
-
             //pipe file descriptors
             //pfd[0] : read side, pfd[1] : write side of the pipe
             int pfd[2];
             pipe(pfd);
-
             pid_t childProcessID1 = fork();
-
             if(childProcessID1==0){
                 dup2(pfd[1], STDOUT_FILENO);	// write end of the pipe becomes stdout 
                 close(pfd[0]); 		            // close read end of the pipe
@@ -191,6 +167,15 @@ int main(){
                 }else if(isCmdHistory(cmds[0])){
                     execCmdHistory();
                 }else{
+                    for(int i=0; args[i]!=NULL; i++){
+                        if(args[i][0]=='$'){
+                            char* token;
+                            token = malloc(128 * sizeof(char));
+                            strcpy(token, args[i]);
+                            ++token;
+                            args[i]=getenv(token);
+                        }
+                    }
                     int status = execvp(args[0], args);
                     if(status<0){
                         printf("ERROR \n");
@@ -200,55 +185,25 @@ int main(){
                 exit(0);
             }else if(childProcessID1>0){
                 waitpid(childProcessID1, NULL, 0); //wait for first child to get done
-                if(isSetEnv(cmds[0])){
-                    // printf("Setting env var in cmd1 \n");
-                    char *inputToSplitEnv[INPUT_BUFFER_SIZE];
-                    strcpy(inputToSplitEnv,cmds[0]);
-                    pipeSplit(inputToSplitEnv,envargs,"=");
-                    strcpy(envVarNames[envVarCount], envargs[0]);
-                    strcpy(envVarValues[envVarCount], envargs[1]);
-                    envVarCount++;
-                }
                 pid_t childProcessID2 = fork();
                 if(childProcessID2==0){
                     dup2(pfd[0], STDIN_FILENO);	// read end of the pipe becomes stdin 
                     close(pfd[0]); 
                     close(pfd[1]); 		// close write end of the pipe
-                    if(isSetEnv(cmds[1])){
-                        char *inputToSplitEnv[INPUT_BUFFER_SIZE];
-                        strcpy(inputToSplitEnv,cmds[1]);
-                        pipeSplit(inputToSplitEnv,envargs,"=");
-                        strcpy(envVarNames[envVarCount], envargs[0]);
-                        strcpy(envVarValues[envVarCount], envargs[1]);
-                        envVarCount++;
-                        // setenv(envargs[0],envargs[1],1);
-                        // strcpy(cmdHistory[processNo%5],input);
-                    }else{
-                        for(int i=0; args2[i]!=NULL; i++){
-                            if(args2[i][0]=='$'){
-                                // printf("Switching args $$\n");
-                                char* token;
-                                token = malloc(128 * sizeof(char));
-                                // printf("Here %s\n", token);
-                                strcpy(token, args2[i]);
-                                // printf("token is %s, %s \n", token, args2[i]);
-                                ++token;
-                                // printf("token  to switch %s \n", token);
-                                for(int j=0; j<envVarCount; j++){
-                                    if(strcmp(token,envVarNames[j])==0){
-                                        // printf("token switched to %s \n", envVarValues[j]);
-                                        args2[i]=envVarValues[j];
-                                        break;
-                                    }
-                                }
-                            }
+                    for(int i=0; args2[i]!=NULL; i++){
+                        if(args2[i][0]=='$'){
+                            char* token;
+                            token = malloc(128 * sizeof(char));
+                            strcpy(token, args2[i]);
+                            ++token;
+                            args2[i]=getenv(token);
                         }
-                        int status = execvp(args2[0], args2);
-                        if(status<0){
-                            printf("ERROR \n");
-                            break;
-                        }
-                    };
+                    }
+                    int status = execvp(args2[0], args2);
+                    if(status<0){
+                        printf("ERROR \n");
+                        break;
+                    }
                 }else if(childProcessID2>0){
                     close(pfd[0]);
                     close(pfd[1]);
@@ -277,10 +232,7 @@ int main(){
                 char *inputToSplitEnv[INPUT_BUFFER_SIZE];
                 strcpy(inputToSplitEnv,input);
                 split(inputToSplitEnv,args,"=");
-                strcpy(envVarNames[envVarCount], args[0]);
-                strcpy(envVarValues[envVarCount], args[1]);
-                envVarCount++;
-                // setenv(args[0],args[1],1);
+                setenv(args[0],args[1],1);
                 strcpy(cmdHistory[processNo%5],input);
             }else{
                 int childProcessID = fork();
@@ -289,24 +241,13 @@ int main(){
                     // execute the command here
                     for(int i=0; args[i]!=NULL; i++){
                         if(args[i][0]=='$'){
-                            printf("Switching args $$\n");
                             char* token;
                             token = malloc(128 * sizeof(char));
-                            printf("Here %s\n", token);
                             strcpy(token, args[i]);
-                            printf("token is %s, %s \n", token, args[i]);
                             ++token;
-                            printf("token  to switch %s \n", token);
-                            for(int j=0; j<envVarCount; j++){
-                                if(strcmp(token,envVarNames[j])==0){
-                                    printf("token switched to %s \n", envVarValues[j]);
-                                    args[i]=envVarValues[j];
-                                    break;
-                                }
-                            }
+                            args[i]=getenv(token);
                         }
                     }
-                    printf("%s, %s \n",args[0],args[1]);
                     execvp(args[0], args);
                     //if control reaches here, execvp returned an error
                     printf("ERROR \n");
@@ -315,18 +256,13 @@ int main(){
                     int childProcessStatus;
                     waitpid(childProcessID, &childProcessStatus, 0);
                     strcpy(cmdHistory[processNo%5],input);
-                    printf("Finished with child process %d status %d \n", childProcessID, childProcessStatus);
                 }else if(input[0]=='&'){
                     processList[processNo]=childProcessID;
                     strcpy(cmdHistory[processNo%5],input);
-                    // printf("Child running in bg %d \n",childProcessID);
-                    int ps;
-                    // printf("%d - ",waitpid(childProcessID,&ps,WNOHANG));
                 }
             }
             processNo++;
         }
-        input[0] = "\0";
     }
     return 0;
 }
