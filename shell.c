@@ -175,6 +175,7 @@ int main()
         while((_pid = waitpid(-1, NULL, WNOHANG))>0){
             continue;
         };
+        waitpid(-1, NULL, WNOHANG);
         printPrompt();
         getInput();
         if (input[0] == '\0')
@@ -258,23 +259,33 @@ int main()
                     close(pfd[0]);
                     // close write end of the pipe
                     close(pfd[1]);
-                    for (int i = 0; args2[i] != NULL; i++)
+                    if (isPsHistory(cmds[1]))
                     {
-                        if (args2[i][0] == '$')
+                        execPsHistory();
+                    }
+                    else if (isCmdHistory(cmds[1]))
+                    {
+                        execCmdHistory();
+                    }else{
+                        for (int i = 0; args2[i] != NULL; i++)
                         {
-                            char *token;
-                            token = malloc(128 * sizeof(char));
-                            strcpy(token, args2[i]);
-                            ++token;
-                            args2[i] = getenv(token);
+                            if (args2[i][0] == '$')
+                            {
+                                char *token;
+                                token = malloc(128 * sizeof(char));
+                                strcpy(token, args2[i]);
+                                ++token;
+                                args2[i] = getenv(token);
+                            }
+                        }
+                        int status = execvp(args2[0], args2);
+                        if (status < 0)
+                        {
+                            printf("ERROR \n");
+                            exit(EXIT_FAILURE);
                         }
                     }
-                    int status = execvp(args2[0], args2);
-                    if (status < 0)
-                    {
-                        printf("ERROR \n");
-                        exit(EXIT_FAILURE);
-                    }
+
                     exit(0);
                 }
                 else if (childProcessID2 > 0)
